@@ -1,0 +1,509 @@
+# Shared dorny/paths-filter configuration for CI fast-path gating.
+#
+# Loaded via: dorny/paths-filter with `filters: '.github/path-filters.yml'`.
+#
+# Filter groups
+# -------------
+# auto_docs:        Exact allowlist of committed generated documentation outputs that
+#                   may be touched by an automated commit.
+# not_auto_docs:    The complement of auto_docs. Used to prove the negation:
+#                   a PR is auto_docs_only when auto_docs == 'true' AND
+#                   not_auto_docs == 'false'. This makes the allowlist a
+#                   HARD boundary -- a single non-allowlisted change disqualifies
+#                   the fast path.
+# code:             Source-bearing changes that warrant the full ci-unified
+#                   pipeline. Includes all of scripts/**; scripts/validation/**
+#                   is intentionally NOT excluded. A bare '!glob' negation under
+#                   dorny/paths-filter any-match semantics matches nearly every
+#                   path (everything except the negated glob), which made `code`
+#                   true for docs-only PRs and broke fast-path detection (#656).
+# docs:             Documentation changes.
+# docs_links:       Active documentation link-check inputs. Kept separate from
+#                   docs because docs intentionally excludes CHANGELOG.md.
+# code_with_validation:
+#                   Like `code` but includes scripts/validation/**.
+#                   core-validation.yml's existing semantics treat validation
+#                   scripts as code. Kept separate to preserve behavior.
+# dependency:       Dependency/toolchain files that warrant lockfile, install,
+#                   doctor, and production-audit validation.
+# pr_security:      Files that warrant lightweight PR security checks.
+# security_tests:   Files that warrant the security integration test suite.
+# security_relevant:
+#                   Files that warrant deep security scans on push/PR events.
+#                   Schedule and workflow_dispatch events always run full deep
+#                   scans regardless of changed paths; push and pull_request
+#                   events run the heavy scans only when changed paths match
+#                   this filter.
+# codeql_relevant:  Files that warrant full CodeQL analysis instead of the
+#                   required-check-safe pass-through path.
+# claude_review_relevant:
+#                   Files that make opt-in Claude PR review useful.
+# test_quarantine:  Files that warrant static skip/quarantine counting.
+#
+# Generators to keep in sync with auto_docs (drift causes spurious slow-path
+# runs, which are safe; missing outputs also fail to fast-path, also safe):
+#   scripts/generate-discovery-map.ts -> docs/_generated/router-fast.json
+#   scripts/manage_skills.py          -> docs/skills/SKILLS_INDEX.md
+#                                        docs/skills/WIZARD_INDEX.md
+#
+# Source/tooling safety contract:
+#   - `code` is the heavy-ci trigger surface. When a new source, infra, ops,
+#     tool, or executable-script directory is added, include it here first so
+#     CI fails toward the heavy path rather than silently fast-pathing.
+#   - `codeql_relevant` and `claude_review_relevant` intentionally duplicate
+#     the JS/TS review surface. Keep shared JS/TS/toolchain patterns aligned,
+#     but do not blindly copy infra-only or non-JS runtime paths into CodeQL
+#     while CodeQL is configured for javascript-typescript only.
+
+auto_docs:
+  - 'docs/_generated/router-fast.json'
+  - 'docs/skills/SKILLS_INDEX.md'
+  - 'docs/skills/WIZARD_INDEX.md'
+
+not_auto_docs:
+  - '**'
+  - '!docs/_generated/router-fast.json'
+  - '!docs/skills/SKILLS_INDEX.md'
+  - '!docs/skills/WIZARD_INDEX.md'
+
+code:
+  - 'audit/surface-contract-matrix/**'
+  - 'vercel.json'
+  - '.vercelignore'
+  - '.dockerignore'
+  - 'railway.toml'
+  - 'railway.worker.toml'
+  - 'railway.capital-call-status.worker.toml'
+  - 'Dockerfile*'
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.js'
+  - '**/*.jsx'
+  - '**/*.mjs'
+  - '**/*.cjs'
+  - '**/*.mts'
+  - '**/*.cts'
+  - '**/*.py'
+  - '**/*.sh'
+  - 'package*.json'
+  - 'package-lock.json'
+  - 'tsconfig*.json'
+  - 'vite.config.*'
+  - 'vitest.config.*'
+  - 'eslint.config.*'
+  - '.codacy.yml'
+  - '.dependency-cruiser.cjs'
+  - '.remarkrc.mjs'
+  - 'Dockerfile*'
+  - 'docker-compose*.yml'
+  - 'semgrep.yml'
+  - '.github/workflows/**'
+  - '.github/actions/**'
+  - 'server/**'
+  - 'client/**'
+  - 'shared/**'
+  - 'scripts/**'
+  - 'tests/**'
+  - 'tools/**'
+  - 'eslint-rules/**'
+  - 'ai-utils/**'
+  - 'infra/**'
+  - 'ops/**'
+  - 'monitoring/**'
+  - 'observability/**'
+  - 'ml-service/**'
+  - 'openapi/**'
+  - 'flags/**'
+
+docs:
+  - '**/*.md'
+  - 'docs/**'
+  - '.github/*.md'
+  - 'scripts/validation/**'
+  - '!CHANGELOG.md'
+
+docs_links:
+  - '**/*.md'
+  - 'docs/**'
+  - '.github/*.md'
+  - 'CLAUDE.md'
+  - 'AGENTS.md'
+  - 'README.md'
+  - 'CHANGELOG.md'
+  - 'DECISIONS.md'
+  - 'CAPABILITIES.md'
+  - 'scripts/check-doc-links.mjs'
+  - 'scripts/lib/doc-link-checker.mjs'
+
+code_with_validation:
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.js'
+  - '**/*.jsx'
+  - 'package*.json'
+  - 'package-lock.json'
+  - '.github/workflows/**'
+  - 'server/**'
+  - 'client/**'
+  - 'shared/**'
+  - 'scripts/**'
+  - 'tests/**'
+
+dependency:
+  - 'package.json'
+  - 'package-lock.json'
+  - '.npmrc'
+  - '.nvmrc'
+  - 'scripts/check-package-manager.mjs'
+  - 'scripts/doctor*.mjs'
+  - 'scripts/verify-lockfile.sh'
+  - '.github/actions/setup-node-env/**'
+  - '.github/path-filters.yml'
+  - '.github/workflows/ci-unified.yml'
+  - '.github/workflows/dependency-validation.yml'
+
+# Keep the shared/* entries in sync with the `schema` array in
+# drizzle.config.ts: every Drizzle schema input must be listed here, or
+# schema-only PRs touching it skip the schema CI lane.
+schema:
+  - 'migrations/**'
+  - 'shared/schema/**'
+  - 'shared/schema.ts'
+  - 'shared/schema-lp-reporting.ts'
+  - 'shared/schema-lp-sprint3.ts'
+  - 'scripts/prod-schema-manifests/**'
+  - 'scripts/prod-schema-patches/**'
+  - 'scripts/prod-schema-apply-policy.mjs'
+  - 'scripts/reconcile-prod-schema.mjs'
+  - 'scripts/run-journaled-0050-0061-migrations.mjs'
+  - 'scripts/db-push.mjs'
+  - 'scripts/db-push-core.mjs'
+  - 'drizzle.config.ts'
+  - '.github/workflows/prod-schema-reconcile.yml'
+
+batch_b:
+  - 'tests/e2e/fund-workspace-real-backend.spec.ts'
+  - 'tests/e2e/fund-workspace-recovery.spec.ts'
+  - 'tests/e2e/support/batch-b-server.ts'
+  - 'tests/e2e/support/batch-b-journey.ts'
+  - 'playwright.batch-b.config.ts'
+  - 'api/**'
+  - 'scripts/build-vercel-api.mjs'
+  - 'vercel.json'
+  - 'server/app.ts'
+  - 'server/routes/mount-common-routes.ts'
+  - 'shared/routes/api-route-manifest.ts'
+  - 'vite.config.ts'
+  - 'server/routes/fund-config.ts'
+  - 'server/routes/funds.ts'
+  - 'server/routes/auth.ts'
+  - 'server/lib/auth/**'
+  - 'server/services/fund-workflow-service.ts'
+  - 'server/services/fund-persistence-service.ts'
+  - 'shared/contracts/fund-workflow-v1.contract.ts'
+  - 'shared/contracts/fund-finalize-v1.contract.ts'
+  - 'shared/contracts/fund-draft-write-v1.contract.ts'
+  - 'client/src/app/**'
+  - 'client/src/stores/**'
+  - 'client/src/components/workspace/**'
+  - 'client/src/components/wizard/**'
+  - 'client/src/pages/fund-setup*'
+  - 'client/src/pages/*Step*.tsx'
+  - 'client/src/pages/steps/**'
+  - 'client/src/pages/login.tsx'
+  - 'client/src/hooks/useWizardStepGuard.ts'
+  - 'client/src/lib/fund-routes.ts'
+  - 'client/src/lib/wizard-telemetry.ts'
+  - 'client/src/lib/install-auth-fetch.ts'
+  - 'client/src/adapters/fund-store-adapters.ts'
+  - 'client/src/services/fund-*.ts'
+  - 'client/src/hooks/useFundDraftSync.ts'
+  - 'client/src/hooks/useIdempotencyKey.ts'
+  - 'client/src/hooks/useLogin.ts'
+  - 'client/src/lib/queryClient.ts'
+  - 'client/src/lib/api-url.ts'
+  - 'client/src/lib/auth-session.ts'
+  - 'client/src/lib/funds-query.ts'
+  - 'client/src/contexts/FundContext.tsx'
+  - 'client/src/pages/settings.tsx'
+  - 'package.json'
+  - 'package-lock.json'
+  - '.github/workflows/ci-unified.yml'
+
+pr_security:
+  - '.gitleaks.toml'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'server/**'
+  - 'shared/**'
+  - 'Dockerfile*'
+  - 'suppression.xml'
+  - '.github/codeql-config.yml'
+  - '.github/workflows/ci-unified.yml'
+  - '.github/workflows/codeql.yml'
+  - '.github/workflows/security-scan.yml'
+  - '.github/workflows/security-tests.yml'
+  - '.github/workflows/secret-scan.yml'
+  - 'scripts/verify-secret-scanner-negative-control.mjs'
+
+security_tests:
+  - 'server/**'
+  - 'shared/**'
+  - 'tests/integration/security/**'
+  - 'package.json'
+  - 'package-lock.json'
+  - '.github/workflows/ci-unified.yml'
+  - '.github/workflows/security-tests.yml'
+
+security_relevant:
+  - '.gitleaks.toml'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'server/**'
+  - 'shared/**'
+  - 'Dockerfile*'
+  - 'suppression.xml'
+  - '.github/actions/setup-node-env/**'
+  - '.github/codeql-config.yml'
+  - '.github/path-filters.yml'
+  - '.github/workflows/codeql.yml'
+  - '.github/workflows/security-scan.yml'
+  - '.github/workflows/security-tests.yml'
+  - '.github/workflows/secret-scan.yml'
+  - 'scripts/verify-secret-scanner-negative-control.mjs'
+
+codeql_relevant:
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.js'
+  - '**/*.jsx'
+  - '**/*.mjs'
+  - '**/*.cjs'
+  - '**/*.mts'
+  - '**/*.cts'
+  - 'client/**'
+  - 'server/**'
+  - 'shared/**'
+  - 'scripts/**'
+  - 'tests/**'
+  - 'tools/**'
+  - 'eslint-rules/**'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'tsconfig*.json'
+  - 'vite.config.*'
+  - 'vitest.config.*'
+  - 'eslint.config.*'
+  - '.github/codeql-config.yml'
+  - '.github/path-filters.yml'
+  - '.github/workflows/codeql.yml'
+  - '.github/workflows/security-scan.yml'
+  - '.github/workflows/security-tests.yml'
+
+claude_review_relevant:
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.js'
+  - '**/*.jsx'
+  - '**/*.mjs'
+  - '**/*.cjs'
+  - '**/*.mts'
+  - '**/*.cts'
+  - '**/*.py'
+  - '**/*.sh'
+  - 'client/**'
+  - 'server/**'
+  - 'shared/**'
+  - 'scripts/**'
+  - 'tests/**'
+  - 'tools/**'
+  - 'eslint-rules/**'
+  - 'ai-utils/**'
+  - 'infra/**'
+  - 'ops/**'
+  - 'monitoring/**'
+  - 'observability/**'
+  - 'ml-service/**'
+  - 'openapi/**'
+  - 'flags/**'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'tsconfig*.json'
+  - 'vite.config.*'
+  - 'vitest.config.*'
+  - 'eslint.config.*'
+  - '.github/path-filters.yml'
+  - '.github/workflows/claude-code-review.yml'
+
+test_quarantine:
+  - 'tests/**'
+  - 'vitest.config.*'
+  - 'vitest.*.ts'
+  - 'tests/quarantine/**'
+
+# Docker-proof trigger surface for schema test infrastructure. The deleted
+# helper path stays listed as a resurrection guard (dorny/paths-filter matches
+# deleted files). Covers the files that define the Testcontainers proof lane:
+# every file in the vitest.config.testcontainers.ts include list, the DB
+# builders (journal replay + push), the vitest config, global setup, the
+# workflow, this filter file, and canonical Testcontainers list module itself
+# (so edits to this trigger surface must run the proof they gate). Keep in sync
+# with the vitest include list.
+schema_tests:
+  - 'migrations/**'
+  - 'workers/**'
+  - 'server/workers/**'
+  - 'tests/helpers/apply-investment-round-constraints.ts'
+  - 'tests/integration/migrations/**'
+  - 'tests/integration/current-forecast-journaled-migration-recovery.test.ts'
+  - 'tests/integration/current-forecast-reference.pg.test.ts'
+  - 'server/migrations/**'
+  - 'scripts/guardrails/server-migrations-new-file.mjs'
+  - 'tests/helpers/testcontainers.ts'
+  - 'tests/helpers/testcontainers-migration.ts'
+  - 'tests/integration/helpers/run-drizzle-push.ts'
+  - 'vitest.config.testcontainers.ts'
+  - 'tests/config/testcontainers-test-paths.mjs'
+  - 'tests/setup/global-setup.testcontainers.ts'
+  - '.github/workflows/testcontainers-ci.yml'
+  - '.github/path-filters.yml'
+  - 'tests/integration/migration-runner.test.ts'
+  - 'tests/integration/fund-lifecycle-db.test.ts'
+  - 'tests/integration/migration-drift.test.ts'
+  - 'tests/integration/prod-schema-clone.test.ts'
+  - 'tests/integration/g3-schema-forward-compatibility.test.ts'
+  - 'tests/integration/prod-journaled-migration-recovery.test.ts'
+  - 'tests/integration/investment-scenario-capability.test.ts'
+  - 'tests/integration/vehicle-financing-participations-real-pg.test.ts'
+  - 'tests/integration/operating-decisions/operating-decisions-schema.pg.test.ts'
+  - 'tests/integration/current-forecast-manual-recompute.pg.test.ts'
+  - 'tests/integration/current-forecast-automatic-shadow.pg.test.ts'
+  - 'tests/integration/current-forecast-manual-recompute-http.pg.test.ts'
+  - 'tests/integration/database-context-neon-adapter.pg.test.ts'
+  - 'tests/integration/fund-scenario-hard-timeout.test.ts'
+  - 'tests/integration/fund-scenario-reserve-worker.test.ts'
+  - 'server/services/fund-scenario-calc-queue-service.ts'
+  - 'server/services/fund-scenario-reserve-calculation-service.ts'
+  - 'server/services/fund-scenario-calculation-run-service.ts'
+  - 'server/services/fund-scenario-calculation-command-service.ts'
+  - 'server/services/fund-scenario-set-service.ts'
+  - 'tests/integration/portfolio-company-update.test.ts'
+  - 'tests/integration/capital-call-status-outbox.test.ts'
+  - 'tests/integration/canary-exclusion-differential.test.ts'
+  - 'tests/integration/release-canary-lifecycle.test.ts'
+  - 'tests/integration/investment-ledger/position-conversion.pg.test.ts'
+  - 'tests/integration/investment-ledger/current-position-ownership-valuation.pg.test.ts'
+  - 'tests/integration/investment-ledger/legacy-position-backfill.pg.test.ts'
+  # F_1.7.0 C1A construction reconciliation
+  - 'tests/integration/construction-reconciliation.pg.test.ts'
+  - 'tests/integration/fund-company-actuals-facts-transaction.pg.test.ts'
+  - 'tests/integration/financial-facts-payload5-consumers.pg.test.ts'
+  - 'tests/integration/lp-reporting-actuals-pilot-publish.pg.test.ts'
+  - 'tests/integration/actuals-draft-journaled-migration.pg.test.ts'
+  - 'tests/integration/actuals-restatement-journaled-migration.pg.test.ts'
+  - 'tests/integration/journaled-0050-0061-migration.pg.test.ts'
+  - 'tests/integration/provision-prod-users.pg.test.ts'
+  - 'scripts/provision-prod-users.ts'
+  - 'tests/integration/reserve-delivery-exposure.pg.test.ts'
+  - 'scripts/release/report-reserve-delivery-exposure.mjs'
+  - 'tests/integration/current-forecast-production-action.pg.test.ts'
+  - 'scripts/run-actuals-draft-journaled-migration.mjs'
+  - 'scripts/run-actuals-restatement-journaled-migration.mjs'
+  - 'scripts/run-journaled-0050-0061-migrations.mjs'
+  - 'scripts/release/actuals-migration-preflight.ts'
+  - 'scripts/release/current-forecast-production-action.mjs'
+  - 'scripts/release/rehearse-current-forecast-neon.mjs'
+  - 'tests/integration/actuals-draft-revisions.pg.test.ts'
+  - 'server/services/fund-actuals/fund-company-actuals-facts-service.ts'
+  # F_1.12.0 financial-facts terminal-head proof
+  - 'tests/integration/financial-facts-terminal-head.pg.test.ts'
+  - 'server/services/financial-facts/fund-lock.ts'
+  - 'server/services/financial-facts/terminal-head.ts'
+  # PLAN_61 Task 18 internal-analysis substrate
+  - 'tests/integration/internal-analysis/analysis-checkpoint.pg.test.ts'
+  - 'migrations/0044_internal_analysis.sql'
+  - 'scripts/prod-schema-manifests/18-internal-analysis.json'
+  - 'shared/schema/internal-analysis.ts'
+  - 'shared/contracts/internal-analysis/analysis-reference-snapshot-v1.contract.ts'
+  - 'server/services/internal-analysis/analysis-checkpoint-service.ts'
+  - 'server/routes/internal-analysis.ts'
+  - 'scripts/audit-prod-operator-seam.mjs'
+  - 'scripts/reconcile-prod-schema.mjs'
+  # F_1.17.0 PR 1 C3 row-scoped reallocation transaction proof
+  - 'tests/integration/reallocation.pg.test.ts'
+  - 'server/routes/reallocation.ts'
+  - 'server/services/allocation-write-service.ts'
+  # F_1.17.0 hotfix: deal import per-row savepoints under the request transaction
+  - 'tests/integration/deal-import-savepoints.pg.test.ts'
+  # F_1.17.0 PR 1b: durable create receipts
+  - 'tests/integration/pipeline-create-commands.pg.test.ts'
+  - 'server/services/deal-pipeline-service.ts'
+  - 'server/routes/deal-pipeline.ts'
+  - 'server/routes/portfolio-companies.ts'
+  - 'server/storage.ts'
+  # WP-L3 (task 16.3) internal-economics policy/envelope/run substrate
+  - 'tests/integration/internal-economics/economics-schema.pg.test.ts'
+  - 'tests/integration/internal-economics/economics-linkage-schema.pg.test.ts'
+  - 'migrations/0045_internal_economics_policy_runs.sql'
+  - 'scripts/prod-schema-manifests/22-internal-economics-policy-runs.json'
+  - 'shared/schema/internal-economics.ts'
+  - 'scripts/prod-schema-apply-policy.mjs'
+  - 'scripts/prod-schema-patches/**'
+  - 'scripts/prod-schema-manifests/**'
+  - 'scripts/prod-schema-manifests/16-positions-ownership-compat.json'
+  - 'scripts/prod-schema-manifests/17-position-source-basis-reliefs.json'
+  - 'migrations/0043_position_source_basis_reliefs.sql'
+  - 'shared/contracts/investment-ledger/position.contract.ts'
+  - 'shared/contracts/investment-ledger/participation.contract.ts'
+  - 'shared/contracts/investment-ledger/current-position.contract.ts'
+  - 'shared/schema/investment-ledger.ts'
+  - 'shared/schema/investment-positions.ts'
+  - 'shared/schema/vehicle-financing-participations.ts'
+  - 'server/services/investment-ledger/position-conversion-service.ts'
+  - 'server/services/investment-ledger/position-service.ts'
+  - 'server/services/investment-ledger/ledger-correction-service.ts'
+  - 'server/services/investment-ledger/current-position-service.ts'
+  - 'server/services/investment-ledger/ownership-snapshot-service.ts'
+  - 'server/services/investment-ledger/position-valuation-service.ts'
+  - 'server/services/investment-ledger/legacy-position-backfill-service.ts'
+  - 'server/routes/investment-ledger.ts'
+  - 'server/routes/cohort-analysis.ts'
+  - 'tests/unit/contract/investment-ledger/position.contract.test.ts'
+  - 'tests/unit/contract/investment-ledger/participation.contract.test.ts'
+  - 'tests/unit/contract/investment-ledger/current-position.contract.test.ts'
+  - 'tests/unit/routes/investment-ledger.contract.test.ts'
+  - 'tests/unit/routes/investment-ledger-makeapp-surface.contract.test.ts'
+  - 'tests/unit/server/cohort-routes-registration.test.ts'
+  - 'tests/unit/services/investment-ledger/position-conversion-service.test.ts'
+  - 'tests/unit/services/investment-ledger/ledger-correction-service.test.ts'
+  - 'tests/unit/services/investment-ledger/current-position-service.test.ts'
+  - 'tests/unit/services/investment-ledger/ownership-snapshot-service.test.ts'
+  - 'tests/unit/services/investment-ledger/position-valuation-service.test.ts'
+  - 'tests/unit/services/investment-ledger/legacy-position-backfill-service.test.ts'
+  - 'tests/unit/scripts/backfill-legacy-position-events.test.ts'
+  - 'tests/unit/schema/investment-positions-schema.test.ts'
+  - 'tests/unit/migration-ledger.test.ts'
+  - 'tests/unit/prod-schema-manifest-sentinels.test.ts'
+  - 'tests/unit/prod-schema-apply-policy.test.ts'
+  - 'tests/integration/prod-schema-reconcile-partial-drift.test.ts'
+  - 'tests/integration/prod-schema-capital-plan-override.test.ts'
+  - 'tests/integration/fund-scenario-capital-persistence.test.ts'
+  - 'tests/integration/fund-scenario-capital-recovery.test.ts'
+  - 'tests/integration/fund-scenario-capital-limits.test.ts'
+  - 'tests/integration/prod-schema-reconcile-0053-capability.test.ts'
+  - 'tests/integration/prod-schema-reconcile-g3-catchup-capability.test.ts'
+  - 'tests/integration/scenarios/scenario-case-seed-persistence.test.ts'
+  - 'tests/integration/scenarios/company-scenario-create-persistence.test.ts'
+  - '.github/workflows/prod-schema-reconcile.yml'
+
+# Real Neon transaction-semantics proof lane.
+neon_lane:
+  - 'server/services/**'
+  - 'server/lib/transaction-support.ts'
+  - 'server/db.ts'
+  - 'tests/integration/neon-http/**'
+  - 'vitest.config.neon.ts'
+  - 'package.json'
+  - 'package-lock.json'
+  - '.github/workflows/ci-unified.yml'
+  - '.github/path-filters.yml'

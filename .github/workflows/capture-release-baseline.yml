@@ -1,0 +1,154 @@
+# STAGING ACCEPTANCE COPY for Updog_restore ADR-107: provider capture is
+# replaced by a mock identity; no environment and no secrets.
+# Captures a bounded pre-merge provider baseline. Execution confers no
+# authorization; output remains evidence under the governing policy.
+name: Capture Release Baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_main_sha:
+        description: Exact current main SHA before runtime PR merge
+        required: true
+        type: string
+      planned_pr_head_sha:
+        description: Exact frozen planned PR head SHA
+        required: true
+        type: string
+      pr_number:
+        description: Planned pull request number
+        required: true
+        type: string
+      plan_path:
+        description: Repository-relative approved plan path at planned PR head
+        required: true
+        type: string
+      plan_sha256:
+        description: SHA-256 of approved plan at planned PR head
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  capture-baseline:
+    name: Capture Immutable Provider Baseline
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact_id: ${{ steps.upload_baseline.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload_baseline.outputs.artifact-digest }}
+      file_sha256: ${{ steps.capture_context.outputs.file_sha256 }}
+
+    steps:
+      - name: Checkout trusted workflow commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify immutable baseline and approved plan binding
+        env:
+          BASELINE_MAIN_SHA: ${{ inputs.baseline_main_sha }}
+          PLANNED_PR_HEAD_SHA: ${{ inputs.planned_pr_head_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PLAN_PATH: ${{ inputs.plan_path }}
+          PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/release/capture-release-recovery-context.mjs validate-baseline \
+            --baseline-main-sha "$BASELINE_MAIN_SHA" \
+            --planned-pr-head-sha "$PLANNED_PR_HEAD_SHA" \
+            --pr-number "$PR_NUMBER" \
+            --plan-path "$PLAN_PATH" \
+            --plan-sha256 "$PLAN_SHA256"
+
+      - name: Write mock provider baseline (STAGING ONLY)
+        id: provider_capture
+        timeout-minutes: 4
+        env:
+          BASELINE_MAIN_SHA: ${{ inputs.baseline_main_sha }}
+          PLANNED_PR_HEAD_SHA: ${{ inputs.planned_pr_head_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PLAN_PATH: ${{ inputs.plan_path }}
+          PLAN_SHA256: ${{ inputs.plan_sha256 }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("node:fs");
+            const services = { "fund-scenario-calc": "staging-service-fund", "capital-call-status": "staging-service-capital" };
+            const sourceSha = process.env.BASELINE_MAIN_SHA;
+            fs.writeFileSync(process.argv[1], JSON.stringify({
+              baselineMainSha: process.env.BASELINE_MAIN_SHA,
+              plannedPrHeadSha: process.env.PLANNED_PR_HEAD_SHA,
+              plannedPrNumber: Number(process.env.PR_NUMBER),
+              planPath: process.env.PLAN_PATH,
+              planSha256: process.env.PLAN_SHA256,
+              githubRunId: process.env.GITHUB_RUN_ID,
+              githubRunAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+              capturedAt: new Date().toISOString(),
+              expectedIdentity: {
+                vercelProjectId: "staging-vercel-project",
+                vercelHostname: "staging.example.com",
+                railwayProjectId: "staging-railway-project",
+                railwayEnvironmentId: "staging-railway-environment",
+                railwayServices: services,
+              },
+              providerIdentity: {
+                vercel: { projectId: "staging-vercel-project", deploymentId: "dpl_staging", hostname: "staging.example.com", sourceSha },
+                railway: {
+                  projectId: "staging-railway-project",
+                  environmentId: "staging-railway-environment",
+                  services: Object.entries(services).map(([serviceName, serviceId]) => ({
+                    serviceName, serviceId, deploymentId: "staging-" + serviceName, sourceSha,
+                  })),
+                },
+              },
+            }));
+          ' "$RUNNER_TEMP/mock-capture-input.json"
+          node scripts/release/capture-release-recovery-context.mjs \
+            --input "$RUNNER_TEMP/mock-capture-input.json" \
+            --output "$RUNNER_TEMP/release-recovery-context-v1.json"
+          rm -f "$RUNNER_TEMP/mock-capture-input.json"
+
+      - name: Record sanitized context file digest
+        id: capture_context
+        run: |
+          set -euo pipefail
+          file_sha256="$(sha256sum "$RUNNER_TEMP/release-recovery-context-v1.json" | awk '{print $1}')"
+          [[ "$file_sha256" =~ ^[0-9a-f]{64}$ ]]
+          echo "file_sha256=$file_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Re-fence main and planned PR head before artifact upload
+        env:
+          BASELINE_MAIN_SHA: ${{ inputs.baseline_main_sha }}
+          PLANNED_PR_HEAD_SHA: ${{ inputs.planned_pr_head_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PLAN_PATH: ${{ inputs.plan_path }}
+          PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/release/capture-release-recovery-context.mjs validate-baseline \
+            --baseline-main-sha "$BASELINE_MAIN_SHA" \
+            --planned-pr-head-sha "$PLANNED_PR_HEAD_SHA" \
+            --pr-number "$PR_NUMBER" \
+            --plan-path "$PLAN_PATH" \
+            --plan-sha256 "$PLAN_SHA256"
+
+      - name: Upload immutable release baseline
+        id: upload_baseline
+        timeout-minutes: 1
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-baseline-v1-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.planned_pr_head_sha }}
+          path: ${{ runner.temp }}/release-recovery-context-v1.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Delete local capture evidence
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP"/release-baseline-* "$RUNNER_TEMP/release-recovery-context-v1.json"
