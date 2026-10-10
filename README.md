@@ -44,3 +44,5 @@ gh workflow run capture-release-baseline.yml --ref main \
 
 The first `main` push run is red by design: a new branch has no `before` commit
 for the classifier.
+
+Staging note: S3 advances main with this unrelated change.
